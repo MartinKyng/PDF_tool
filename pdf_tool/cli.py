@@ -16,6 +16,7 @@ from typing import Sequence
 from . import __version__
 from .errors import PdfToolError
 from .join import JoinResult, join_pdfs
+from .units import ensure_pdf_suffix, human_size
 
 PROGRAM_NAME = "pdf-join"
 
@@ -25,29 +26,6 @@ examples:
   %(prog)s chapter*.pdf --output book.pdf
   %(prog)s a.pdf b.pdf c.pdf -o out/all.pdf --overwrite
 """
-
-
-def _human_size(size_bytes: int) -> str:
-    """Format a byte count the way a person would read it."""
-    size = float(size_bytes)
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024 or unit == "GB":
-            if unit == "B":
-                return f"{int(size)} {unit}"
-            return f"{size:.1f} {unit}"
-        size /= 1024
-    return f"{size:.1f} GB"  # pragma: no cover - unreachable
-
-
-def _add_pdf_suffix(path: Path) -> tuple[Path, bool]:
-    """Append ``.pdf`` to ``path`` when it has no PDF extension.
-
-    Returns the path to use and whether it was changed, so the caller can
-    tell the user about it.
-    """
-    if path.suffix.lower() == ".pdf":
-        return path, False
-    return path.with_suffix(path.suffix + ".pdf"), True
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -113,7 +91,7 @@ def _report(result: JoinResult, renamed_from: Path | None, quiet: bool) -> None:
         )
     print(
         f"Wrote {result.output} "
-        f"({result.total_pages} page(s), {_human_size(result.size_bytes)})"
+        f"({result.total_pages} page(s), {human_size(result.size_bytes)})"
     )
 
 
@@ -121,7 +99,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Entry point. Returns a process exit code."""
     args = build_parser().parse_args(argv)
 
-    output, renamed = _add_pdf_suffix(Path(args.output).expanduser())
+    output, renamed = ensure_pdf_suffix(Path(args.output).expanduser())
 
     try:
         result = join_pdfs(

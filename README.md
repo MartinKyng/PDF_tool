@@ -23,6 +23,7 @@ runtime dependency is [`pypdf`](https://pypi.org/project/pypdf/).
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .          # installs the pdf-join command
+pip install -e ".[gui]"   # also installs PySide6 for the desktop app
 ```
 
 Just want the library? `pip install -r requirements.txt` and
@@ -94,6 +95,40 @@ Errors derive from `pdf_tool.PdfToolError`: `NotEnoughInputsError`,
 `InputNotFoundError`, `InvalidPdfError`, `EncryptedPdfError`,
 `OutputExistsError`, `OutputConflictError`.
 
+## Desktop GUI (PySide6)
+
+A modern dark-themed desktop app ships with the `[gui]` extra. Run it with
+`pdf-join-gui` (or `python -m pdf_tool.gui`, optionally passing PDFs as
+arguments).
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="PDF Tool GUI screenshot" width="480">
+</p>
+
+It uses the same `join_pdfs` library function as the CLI, so behaviour and
+guarantees are identical. You can drag PDFs in from the file manager, reorder
+them, see live page counts and sizes, name the output, choose a folder, and
+toggle "keep bookmarks" / "overwrite". Joining runs on a background thread, so
+the window never freezes.
+
+The GUI is optional: `pdf-join` does not import Qt at all.
+
+## Continuous integration & releases
+
+* **`.github/workflows/ci.yml`** runs pyflakes and the full pytest suite on
+  Linux / Windows / macOS across Python 3.9–3.13. GUI tests run headless with
+  `QT_QPA_PLATFORM=offscreen` (Linux installs the Qt runtime libs it needs; on
+  any host where Qt cannot load, those tests skip and the CLI tests still run).
+* **`.github/workflows/release.yml`** fires on `v*` tags. It builds an sdist +
+  wheel (published to PyPI via trusted publishing) and uses PyInstaller
+  ([`packaging/pdf-tool.spec`](packaging/pdf-tool.spec)) to produce single-file
+  executables — `pdf-join` and `pdf-join-gui` — on Windows, macOS and Linux,
+  then attaches everything to a GitHub release.
+
+To enable PyPI publishing, register this repo + workflow as a *trusted
+publisher* on pypi.org; until then that step fails harmlessly while the GitHub
+release is still produced.
+
 ## Development
 
 ```bash
@@ -104,6 +139,11 @@ python -m pytest
 The tests build their own fixture PDFs byte by byte
 ([`tests/factories.py`](tests/factories.py)), so no PDF generator is needed and
 the fixtures can be inspected exactly.
+
+GUI tests are headless: set `QT_QPA_PLATFORM=offscreen`. On a bare Linux
+machine Qt also needs its runtime libraries (e.g. `libegl1 libgl1
+libxkbcommon0 libdbus-1-3`); CI installs them automatically. Where Qt cannot
+load, the GUI tests skip and the CLI tests still run.
 
 ## Limitations
 
@@ -121,4 +161,5 @@ the fixtures can be inspected exactly.
 
 * `--copy-metadata` to carry one input's document information into the output.
 * Page-range selection (`a.pdf:2-5`) and reordering.
-* A GUI front end over the same library functions.
+* Code-signing / notarisation for the Windows and macOS executables.
+* A light theme and system-theme detection for the GUI.

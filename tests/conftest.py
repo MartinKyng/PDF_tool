@@ -29,3 +29,38 @@ def two_pdfs(make_pdf) -> tuple[Path, Path]:
     first = make_pdf("first.pdf", ["first-1", "first-2"])
     second = make_pdf("second.pdf", ["second-1", "second-2", "second-3"])
     return first, second
+
+# ---------------------------------------------------------------- GUI helpers
+import os
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+
+@pytest.fixture(scope="session")
+def qapp():
+    """A session-wide QApplication, skipped if Qt cannot run on this host."""
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication([])
+    yield app
+
+
+@pytest.fixture
+def qwait(qapp):
+    """Return a helper that pumps the event loop until a condition holds."""
+
+    def _wait(condition, timeout_ms=5000, interval_ms=25):
+        import time
+
+        deadline = time.monotonic() + timeout_ms / 1000.0
+        while time.monotonic() < deadline:
+            qapp.processEvents()
+            if condition():
+                qapp.processEvents()
+                return True
+            time.sleep(interval_ms / 1000.0)
+        qapp.processEvents()
+        return condition()
+
+    return _wait
