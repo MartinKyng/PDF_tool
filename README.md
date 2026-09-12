@@ -120,10 +120,17 @@ The GUI is optional: `pdf-join` does not import Qt at all.
   `QT_QPA_PLATFORM=offscreen` (Linux installs the Qt runtime libs it needs; on
   any host where Qt cannot load, those tests skip and the CLI tests still run).
 * **`.github/workflows/release.yml`** fires on `v*` tags. It builds an sdist +
-  wheel (published to PyPI via trusted publishing) and uses PyInstaller
-  ([`packaging/pdf-tool.spec`](packaging/pdf-tool.spec)) to produce single-file
+  wheel (published to PyPI via trusted publishing) and produces single-file
   executables — `pdf-join` and `pdf-join-gui` — on Windows, macOS and Linux,
   then attaches everything to a GitHub release.
+* The exe build goes through a Python build script,
+  [`packaging/build_exe.py`](packaging/build_exe.py): it drives PyInstaller
+  from [`packaging/pdf-tool.spec`](packaging/pdf-tool.spec) and, on Windows,
+  compiles the Inno Setup installer
+  ([`packaging/installer.iss`](packaging/installer.iss)) to a
+  `PDFTool-Setup-<version>.exe` (with Start-Menu/desktop shortcuts and the app
+  dir added to the user's `PATH` so `pdf-join` works from a prompt). CI installs
+  Inno Setup with Chocolatey on the Windows runner.
 
 To enable PyPI publishing, register this repo + workflow as a *trusted
 publisher* on pypi.org; until then that step fails harmlessly while the GitHub

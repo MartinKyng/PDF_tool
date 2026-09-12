@@ -1,7 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec producing two single-file executables.
 
-Build from the repository root with::
+The spec is invoked by the Python build script
+(``python packaging/build_exe.py``), which is also what the release workflow
+runs. To build by hand::
 
     pyinstaller packaging/pdf-tool.spec --noconfirm
 

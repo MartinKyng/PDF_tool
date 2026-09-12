@@ -58,15 +58,22 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install ".[dev]"
 
-      - name: Build single-file executables
-        run: python -m PyInstaller packaging/pdf-tool.spec --noconfirm
+      - name: Install Inno Setup (Windows, for the installer)
+        if: runner.os == 'Windows'
+        run: choco install innosetup -y --no-progress
+
+      - name: Build executables (+ Windows installer)
+        run: python packaging/build_exe.py --installer
+        if: runner.os == 'Windows'
+
+      - name: Build executables
+        run: python packaging/build_exe.py
+        if: runner.os != 'Windows'
 
       - uses: actions/upload-artifact@v4
         with:
           name: exe-${{ matrix.os }}
-          path: |
-            dist/pdf-join*
-            dist/pdf-join-gui*
+          path: dist/*
 
   publish_release:
     name: create GitHub release
