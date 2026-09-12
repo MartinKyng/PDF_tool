@@ -18,12 +18,14 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QSizePolicy,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
 
 from ..join import JoinResult
 from ..units import ensure_pdf_suffix, human_size
+from ..version import APP_NAME, __version__
 from .file_list import FileItemDelegate, ROLE_PAGES, ROLE_PATH, ROLE_SIZE
 from .worker import JoinWorker, PageProbeWorker
 
@@ -35,8 +37,9 @@ class MainWindow(QWidget):
 
     def __init__(self, initial_files: list[Path] | None = None) -> None:
         super().__init__()
-        self.setWindowTitle("PDF Tool — Join")
-        self.resize(760, 640)
+        self.setWindowTitle(f"{APP_NAME} · Join PDFs")
+        self.setWindowIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
+        self.resize(780, 660)
         self.setMinimumSize(560, 480)
         self.setAcceptDrops(True)
 
@@ -59,14 +62,21 @@ class MainWindow(QWidget):
         # header
         header = QVBoxLayout()
         header.setSpacing(2)
-        self.title_label = QLabel("PDF Tool")
+        self.title_label = QLabel(APP_NAME)
         self.title_label.setObjectName("appTitle")
+        self.version_label = QLabel(f"v{__version__} · desktop")
+        self.version_label.setObjectName("appVersion")
+        title_row = QHBoxLayout()
+        title_row.setSpacing(8)
+        title_row.addWidget(self.title_label)
+        title_row.addWidget(self.version_label)
+        title_row.addStretch(1)
+        header.addLayout(title_row)
         self.subtitle_label = QLabel(
-            "Drop PDFs below, choose a name, and join them without touching the pages."
+            "A calm workspace for joining PDFs without changing their pages."
         )
         self.subtitle_label.setObjectName("appSubtitle")
         self.subtitle_label.setWordWrap(True)
-        header.addWidget(self.title_label)
         header.addWidget(self.subtitle_label)
         root.addLayout(header)
 

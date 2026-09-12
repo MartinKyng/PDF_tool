@@ -35,6 +35,14 @@ QLabel#appTitle {{
     letter-spacing: 0.2px;
 }}
 QLabel#appSubtitle {{ color: {TEXT_MUTED}; font-size: 12px; }}
+QLabel#appVersion {{
+    color: {TEXT_MUTED};
+    background: {SURFACE_RAISED};
+    border: 1px solid {BORDER};
+    border-radius: 10px;
+    padding: 3px 8px;
+    font-size: 11px;
+}}
 
 /* card that wraps the file list */
 QFrame#fileCard, QFrame#outputCard {{

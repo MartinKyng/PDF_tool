@@ -1,8 +1,9 @@
 """PySide6 front end for pdf_tool.
 
-The GUI is intentionally an optional extra: it is never imported by the
-command line tool, so ``pdf-join`` keeps working without Qt.  Install it with
-``pip install pdf-tool[gui]`` (or ``pip install PySide6``).
+The GUI is the product surface and is bundled into the desktop executable.
+It is kept in a subpackage so the PDF engine and headless tests stay easy to
+maintain.  Source developers install its dependencies from
+``requirements-dev.txt``; end users download the desktop build.
 """
 
 from __future__ import annotations

@@ -17,8 +17,10 @@ from .errors import (
     PdfToolError,
 )
 from .join import JoinedFile, JoinResult, join_pdfs
+from .version import APP_NAME, __version__
 
 __all__ = [
+    "APP_NAME",
     "__version__",
     "join_pdfs",
     "JoinResult",
@@ -32,5 +34,3 @@ __all__ = [
     "OutputExistsError",
     "OutputConflictError",
 ]
-
-__version__ = "0.1.0"
