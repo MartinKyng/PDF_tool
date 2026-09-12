@@ -78,9 +78,9 @@ begin
   begin
     if Pos(';' + Dir + ';', ';' + Current + ';') <> 0 then
     begin
-      Current := StringChange(Current, ';' + Dir, '');
-      Current := StringChange(Current, Dir + ';', '');
-      Current := StringChange(Current, Dir, '');
+      StringChangeEx(Current, ';' + Dir, '', True);
+      StringChangeEx(Current, Dir + ';', '', True);
+      StringChangeEx(Current, Dir, '', True);
       Result := RegWriteStringValue(HKEY_CURRENT_USER, EnvKey, 'Path', Current);
     end;
   end;
