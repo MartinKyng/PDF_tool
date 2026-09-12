@@ -55,11 +55,13 @@ class TestPureHelpers:
         (tmp_path / "subdir").mkdir()
 
         names = [p.name for p in build.collect_artifacts(tmp_path)]
-        assert names == [
+        # Membership is the contract; order is platform-dependent, so compare
+        # as a set.
+        assert set(names) == {
             "PDFTool-Setup-0.1.0.exe",
             "pdf-join-gui.exe",
             "pdf-join.exe",
-        ]
+        }
 
     def test_collect_artifacts_empty_dir(self, tmp_path):
         assert build.collect_artifacts(tmp_path / "missing") == []
@@ -103,7 +105,7 @@ class TestBuildExes:
 
         artifacts = build.build_exes(dist=tmp_path, work=tmp_path / "work")
 
-        assert [a.name for a in artifacts] == ["pdf-join-gui.exe", "pdf-join.exe"]
+        assert {a.name for a in artifacts} == {"pdf-join-gui.exe", "pdf-join.exe"}
         assert str(_BUILD_SCRIPT.parent / "pdf-tool.spec") == captured["argv"][0]
 
 

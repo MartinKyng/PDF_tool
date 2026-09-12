@@ -90,7 +90,10 @@ def collect_artifacts(dist: Path) -> list[Path]:
     if not dist.is_dir():
         return []
     wanted = []
-    for entry in sorted(dist.iterdir()):
+    # Sort on the raw name so the order is identical on case-sensitive
+    # (Linux/macOS) and case-insensitive (Windows) filesystems; pathlib's own
+    # Path ordering normalises case on Windows and would reorder the list.
+    for entry in sorted(dist.iterdir(), key=lambda p: p.name):
         if not entry.is_file():
             continue
         if entry.name.startswith("pdf-join") or entry.name.lower().endswith(".exe"):

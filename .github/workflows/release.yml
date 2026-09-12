@@ -1,12 +1,13 @@
 name: Release
 
-# Builds distributables for every tagged version (e.g. v0.1.0) and publishes:
-#   * sdist + wheel  -> PyPI (trusted publishing) and GitHub release
-#   * single-file executables (pdf-join, pdf-join-gui) -> GitHub release
+# Publishes the Python distribution (sdist + wheel) to PyPI for every tagged
+# version (e.g. v0.1.0) using trusted publishing.
+#
+# The executables are published separately by .github/workflows/publish.yml.
 #
 # To enable PyPI trusted publishing, add this repo (owner/name, workflow
 # "release.yml") as a trusted publisher on pypi.org. The job fails harmlessly
-# until then; the GitHub release is always produced.
+# until then.
 
 on:
   push:
@@ -14,8 +15,8 @@ on:
       - "v*"
 
 permissions:
-  contents: write     # create the GitHub release + upload assets
   id-token: write     # PyPI trusted publishing
+  contents: read
 
 jobs:
   sdist_wheel:
@@ -39,54 +40,3 @@ jobs:
         with:
           name: python-dist
           path: dist/*
-
-  executables:
-    name: build exe on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install (non-editable so PyInstaller bundles the package)
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install ".[dev]"
-
-      - name: Install Inno Setup (Windows, for the installer)
-        if: runner.os == 'Windows'
-        run: choco install innosetup -y --no-progress
-
-      - name: Build executables (+ Windows installer)
-        run: python packaging/build_exe.py --installer
-        if: runner.os == 'Windows'
-
-      - name: Build executables
-        run: python packaging/build_exe.py
-        if: runner.os != 'Windows'
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: exe-${{ matrix.os }}
-          path: dist/*
-
-  publish_release:
-    name: create GitHub release
-    runs-on: ubuntu-latest
-    needs: [sdist_wheel, executables]
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: assets
-          merge-multiple: true
-
-      - name: Publish release with all artifacts
-        uses: softprops/action-gh-release@v2
-        with:
-          files: assets/**
-          generate_release_notes: true

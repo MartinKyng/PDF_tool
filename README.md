@@ -119,10 +119,12 @@ The GUI is optional: `pdf-join` does not import Qt at all.
   Linux / Windows / macOS across Python 3.9–3.13. GUI tests run headless with
   `QT_QPA_PLATFORM=offscreen` (Linux installs the Qt runtime libs it needs; on
   any host where Qt cannot load, those tests skip and the CLI tests still run).
-* **`.github/workflows/release.yml`** fires on `v*` tags. It builds an sdist +
-  wheel (published to PyPI via trusted publishing) and produces single-file
-  executables — `pdf-join` and `pdf-join-gui` — on Windows, macOS and Linux,
-  then attaches everything to a GitHub release.
+* **`.github/workflows/release.yml`** fires on `v*` tags and publishes the
+  sdist + wheel to PyPI via trusted publishing.
+* **`.github/workflows/publish.yml`** fires on `v*` tags, builds the
+  single-file executables — `pdf-join` and `pdf-join-gui` — on Windows, macOS
+  and Linux (plus the Windows installer), and publishes them to a GitHub
+  release.
 * The exe build goes through a Python build script,
   [`packaging/build_exe.py`](packaging/build_exe.py): it drives PyInstaller
   from [`packaging/pdf-tool.spec`](packaging/pdf-tool.spec) and, on Windows,
