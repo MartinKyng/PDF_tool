@@ -1,0 +1,2 @@
+# Runtime dependency for pdf_tool.
+pypdf>=4.0
