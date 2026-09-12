@@ -8,7 +8,7 @@
 ; ..\dist relative to this file (i.e. <repo>\dist).
 
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #error "AppVersion must be supplied by packaging/build_exe.py"
 #endif
 
 #define MyAppName "PDF Tool"

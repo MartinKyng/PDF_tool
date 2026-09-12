@@ -1,2 +1,2 @@
-# Runtime dependency for pdf_tool.
+# Runtime dependency bundled into the desktop executable at build time.
 pypdf>=4.0

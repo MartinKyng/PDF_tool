@@ -1,4 +1,4 @@
-# Development / test dependencies (mirrors the [dev] extra in pyproject.toml).
+# Dependencies used to develop and build the PDF Tool desktop app.
 -r requirements.txt
 pytest>=7.0
 PySide6>=6.5
