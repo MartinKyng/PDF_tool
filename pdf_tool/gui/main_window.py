@@ -554,6 +554,12 @@ class MainWindow(QWidget):
                 "All files (*)"
             )
             title = "Choose pictures"
+        elif self._mode == "compress":
+            filt = (
+                "PDFs and pictures (*.pdf *.jpg *.jpeg *.png *.bmp *.gif "
+                "*.tif *.tiff *.webp);;All files (*)"
+            )
+            title = "Choose a file to compress"
         else:
             filt = "PDF files (*.pdf);;All files (*)"
             title = "Choose PDFs to join"
