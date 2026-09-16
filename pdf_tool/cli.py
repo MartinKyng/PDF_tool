@@ -15,6 +15,7 @@ from typing import Sequence
 
 from . import __version__
 from .errors import PdfToolError
+from .images import ImagesToPdfResult, images_to_pdf
 from .join import JoinResult, join_pdfs
 from .units import ensure_pdf_suffix, human_size
 
@@ -25,6 +26,7 @@ examples:
   %(prog)s first.pdf second.pdf -o combined.pdf
   %(prog)s chapter*.pdf --output book.pdf
   %(prog)s a.pdf b.pdf c.pdf -o out/all.pdf --overwrite
+  %(prog)s --images photo.jpg scan.png -o album.pdf
 """
 
 
@@ -34,7 +36,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog=PROGRAM_NAME,
         description=(
             "Join two or more PDF files into one, in the order given, "
-            "without editing their contents."
+            "without editing their contents. Pass --images to turn "
+            "JPEG, PNG and other pictures into a PDF instead."
         ),
         epilog=EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -43,7 +46,13 @@ def build_parser() -> argparse.ArgumentParser:
         "inputs",
         nargs="+",
         metavar="INPUT",
-        help="PDF files to join, in the order they should appear",
+        help="PDF files to join (or pictures when --images is set)",
+    )
+    parser.add_argument(
+        "--images",
+        action="store_true",
+        help="treat inputs as pictures (JPEG, PNG, BMP, GIF, TIFF, WebP) "
+        "and write one PDF page per image",
     )
     parser.add_argument(
         "-o",
@@ -77,6 +86,25 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _report_images(
+    result: ImagesToPdfResult, renamed_from: Path | None, quiet: bool
+) -> None:
+    if quiet:
+        return
+    print(f"Converting {len(result.files)} image file(s):")
+    for index, item in enumerate(result.files, start=1):
+        print(f"  {index}. {item.path} ({item.width}×{item.height})")
+    if renamed_from is not None:
+        print(
+            f"note: '{renamed_from}' has no .pdf extension, "
+            f"wrote '{result.output}' instead"
+        )
+    print(
+        f"Wrote {result.output} "
+        f"({result.total_pages} page(s), {human_size(result.size_bytes)})"
+    )
+
+
 def _report(result: JoinResult, renamed_from: Path | None, quiet: bool) -> None:
     """Print a short summary of what was joined."""
     if quiet:
@@ -102,17 +130,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     output, renamed = ensure_pdf_suffix(Path(args.output).expanduser())
 
     try:
-        result = join_pdfs(
-            args.inputs,
-            output,
-            overwrite=args.overwrite,
-            keep_bookmarks=not args.no_bookmarks,
-        )
+        if args.images:
+            result = images_to_pdf(
+                args.inputs,
+                output,
+                overwrite=args.overwrite,
+            )
+        else:
+            result = join_pdfs(
+                args.inputs,
+                output,
+                overwrite=args.overwrite,
+                keep_bookmarks=not args.no_bookmarks,
+            )
     except PdfToolError as exc:
         print(f"{PROGRAM_NAME}: error: {exc}", file=sys.stderr)
         return 1
 
-    _report(result, Path(args.output).expanduser() if renamed else None, args.quiet)
+    note = Path(args.output).expanduser() if renamed else None
+    if args.images:
+        _report_images(result, note, args.quiet)
+    else:
+        _report(result, note, args.quiet)
     return 0
 
 

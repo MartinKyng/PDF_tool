@@ -25,7 +25,7 @@ COMMON = dict(
     pathex=[REPO_ROOT],
     binaries=[],
     datas=[],
-    hiddenimports=["pdf_tool", "pypdf"],
+    hiddenimports=["pdf_tool", "pypdf", "PIL"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -62,7 +62,7 @@ cli_exe = EXE(
 # --- GUI --------------------------------------------------------------------
 gui = Analysis(
     ["gui_launcher.py"],
-    hiddenimports=["pdf_tool", "pdf_tool.gui", "pypdf"],
+    hiddenimports=["pdf_tool", "pdf_tool.gui", "pypdf", "PIL"],
     pathex=[REPO_ROOT],
     binaries=[],
     datas=[],

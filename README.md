@@ -1,28 +1,25 @@
 # PDF Tool
 
-PDF Tool is a focused desktop app for combining PDF files. It gives you a
-simple, modern drag-and-drop workspace and writes a new PDF without editing
-the source files.
-
-> **MVP scope:** joining PDFs is the first usable stable feature. More PDF
-> operations will be added only after the first stable version is accepted.
+PDF Tool is a focused desktop app for combining PDF files and turning pictures
+into PDFs. It gives you a simple, modern drag-and-drop workspace and writes a
+new PDF without editing the source files.
 
 ## What is included now
 
 - Native desktop executable for Windows, macOS and Linux.
-- Drag PDFs into the app, or use **Add** to choose them.
-- Reorder files before joining.
+- **Join PDFs:** drag PDFs into the app, or use **Add** to choose them.
+- **Images → PDF:** drop JPEG, PNG, BMP, GIF, TIFF or WebP files; each picture
+  becomes one page of a new PDF.
+- Reorder files before joining or converting.
 - Live page counts and file sizes.
-- Keep or remove bookmarks.
+- Keep or remove bookmarks when joining PDFs.
 - Choose an output folder and filename.
-- Safe output handling: source PDFs are never changed and an existing output
+- Safe output handling: source files are never changed and an existing output
   is not replaced unless you explicitly enable overwrite.
-- The join runs away from the UI thread, so the window stays responsive.
+- Work runs away from the UI thread, so the window stays responsive.
 
-The first release intentionally does **not** attempt to be a general-purpose
-PDF editor. Splitting, rotating, deleting pages, annotations, conversion and
-other operations remain out of scope until the stable MVP has been used and
-approved.
+Splitting, rotating, deleting pages, annotations and other editor-style
+operations remain out of scope for now.
 
 ## Install the desktop app
 
@@ -41,12 +38,13 @@ Use them for testing only; stable releases are built from `main`.
 ## Using the app
 
 1. Open PDF Tool.
-2. Drop two or more PDFs into **Files to join**.
-3. Drag rows, or use the up/down controls, to set the output order.
-4. Choose the output filename and folder.
-5. Choose whether bookmarks should be kept and whether an existing file may be
-   overwritten.
-6. Select **Join PDFs**.
+2. Choose **Join PDFs** or **Images → PDF** at the top.
+3. Drop files into the list (or use **Add**).
+4. Drag rows, or use the up/down controls, to set the output order.
+5. Choose the output filename and folder.
+6. For PDF joins, choose whether bookmarks should be kept. Optionally allow
+   overwriting an existing file.
+7. Select **Join PDFs** or **Create PDF**.
 
 The app uses a page-level copy. It does not rasterise, re-typeset, resize or
 recompress page content. Page geometry, rotation, resources, fonts and
@@ -108,9 +106,8 @@ GitHub Actions handles the channels:
 
 See [`docs/RELEASING.md`](docs/RELEASING.md) for the maintainer checklist.
 
-## Project boundaries
+From the command line you can also convert pictures:
 
-Until the first usable stable version is explicitly accepted, changes should
-focus on reliability, packaging and the join workflow. Additional PDF
-manipulation features belong in a later phase rather than being silently added
-to the MVP.
+```bash
+python -m pdf_tool --images photo.jpg scan.png -o album.pdf
+```

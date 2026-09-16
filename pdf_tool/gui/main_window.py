@@ -19,15 +19,17 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QStyle,
+    QTabBar,
     QVBoxLayout,
     QWidget,
 )
 
+from ..images import IMAGE_EXTENSIONS
 from ..join import JoinResult
 from ..units import ensure_pdf_suffix, human_size
 from ..version import APP_NAME, __version__
 from .file_list import FileItemDelegate, ROLE_PAGES, ROLE_PATH, ROLE_SIZE
-from .worker import JoinWorker, PageProbeWorker
+from .worker import ImagesWorker, JoinWorker, PageProbeWorker
 
 DEFAULT_OUTPUT = "combined.pdf"
 
@@ -37,7 +39,8 @@ class MainWindow(QWidget):
 
     def __init__(self, initial_files: list[Path] | None = None) -> None:
         super().__init__()
-        self.setWindowTitle(f"{APP_NAME} · Join PDFs")
+        self.setWindowTitle(f"{APP_NAME}")
+        self._mode = "join"
         self.setWindowIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
         self.resize(780, 660)
         self.setMinimumSize(560, 480)
@@ -72,6 +75,13 @@ class MainWindow(QWidget):
         title_row.addWidget(self.version_label)
         title_row.addStretch(1)
         header.addLayout(title_row)
+        self.mode_bar = QTabBar()
+        self.mode_bar.setObjectName("modeBar")
+        self.mode_bar.addTab("Join PDFs")
+        self.mode_bar.addTab("Images → PDF")
+        self.mode_bar.setExpanding(False)
+        header.addWidget(self.mode_bar)
+
         self.subtitle_label = QLabel(
             "A calm workspace for joining PDFs without changing their pages."
         )
@@ -88,11 +98,11 @@ class MainWindow(QWidget):
         files_layout.setSpacing(10)
 
         files_head = QHBoxLayout()
-        files_title = QLabel("Files to join")
-        files_title.setObjectName("cardTitle")
+        self.files_title = QLabel("Files to join")
+        self.files_title.setObjectName("cardTitle")
         self.count_label = QLabel("0 files · 0 pages")
         self.count_label.setObjectName("cardHint")
-        files_head.addWidget(files_title)
+        files_head.addWidget(self.files_title)
         files_head.addStretch(1)
         files_head.addWidget(self.count_label)
         files_layout.addLayout(files_head)
@@ -188,6 +198,7 @@ class MainWindow(QWidget):
         self.browse_button.clicked.connect(self._browse_output)
         self.join_button.clicked.connect(self.start_join)
         self.list_widget.model().rowsMoved.connect(self._refresh_counts)
+        self.mode_bar.currentChanged.connect(self._on_mode_changed)
 
     # -- drag & drop ------------------------------------------------------
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
@@ -199,9 +210,9 @@ class MainWindow(QWidget):
     def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802
         paths = [Path(url.toLocalFile()) for url in event.mimeData().urls()
                  if url.isLocalFile()]
-        pdfs = [p for p in paths if p.suffix.lower() == ".pdf" and p.is_file()]
-        if pdfs:
-            self.add_files(pdfs)
+        accepted = [p for p in paths if p.is_file() and self._accepts_path(p)]
+        if accepted:
+            self.add_files(accepted)
             event.acceptProposedAction()
         else:
             event.ignore()
@@ -294,19 +305,53 @@ class MainWindow(QWidget):
         if thread in self._threads:
             self._threads.remove(thread)
 
+    def _on_mode_changed(self, index: int) -> None:
+        self._mode = "images" if index == 1 else "join"
+        self.clear_all()
+        if self._mode == "images":
+            self.files_title.setText("Pictures to convert")
+            self.subtitle_label.setText(
+                "Drop JPEG, PNG and other pictures; each image becomes one PDF page."
+            )
+            self.join_button.setText("Create PDF")
+            self.bookmarks_check.setVisible(False)
+            self.set_status("Add one or more pictures.")
+        else:
+            self.files_title.setText("Files to join")
+            self.subtitle_label.setText(
+                "A calm workspace for joining PDFs without changing their pages."
+            )
+            self.join_button.setText("Join PDFs")
+            self.bookmarks_check.setVisible(True)
+            self.set_status("Add at least two PDFs to join.")
+        self._refresh_counts()
+
+    def _accepts_path(self, path: Path) -> bool:
+        suffix = path.suffix.lower()
+        if self._mode == "images":
+            return suffix in IMAGE_EXTENSIONS
+        return suffix == ".pdf"
+
+    def _min_files(self) -> int:
+        return 1 if self._mode == "images" else 2
+
     def _refresh_counts(self, *_: object) -> None:
         files = self.list_widget.count()
         pages = sum((i.data(ROLE_PAGES) or 0) for i in self._items())
         self.count_label.setText(f"{files} file{'s' if files != 1 else ''} · {pages} pages")
-        enabled = files >= 2
+        needed = self._min_files()
+        enabled = files >= needed
         for btn in (self.join_button, self.up_button, self.down_button,
                     self.remove_button, self.clear_button):
             if btn is self.join_button:
                 btn.setEnabled(enabled and not self._busy())
             else:
                 btn.setEnabled(files > 0)
-        if files < 2:
-            self.set_status("Add at least two PDFs to join.")
+        if files < needed:
+            if self._mode == "images":
+                self.set_status("Add one or more pictures.")
+            else:
+                self.set_status("Add at least two PDFs to join.")
 
     def _busy(self) -> bool:
         return self._busy_flag
@@ -314,8 +359,12 @@ class MainWindow(QWidget):
     # -- join -------------------------------------------------------------
     def start_join(self) -> None:
         paths = self.current_paths()
-        if len(paths) < 2:
-            self.set_status("Add at least two PDF files first.", "error")
+        needed = self._min_files()
+        if len(paths) < needed:
+            if self._mode == "images":
+                self.set_status("Add at least one picture first.", "error")
+            else:
+                self.set_status("Add at least two PDF files first.", "error")
             return
 
         raw_name = self.output_edit.text().strip() or DEFAULT_OUTPUT
@@ -323,15 +372,22 @@ class MainWindow(QWidget):
         output = self._output_dir / name
 
         self._set_busy(True)
-        self.set_status("Joining…")
+        self.set_status("Creating PDF…" if self._mode == "images" else "Joining…")
 
         thread = QThread(self)
-        worker = JoinWorker(
-            paths,
-            output,
-            overwrite=self.overwrite_check.isChecked(),
-            keep_bookmarks=self.bookmarks_check.isChecked(),
-        )
+        if self._mode == "images":
+            worker = ImagesWorker(
+                paths,
+                output,
+                overwrite=self.overwrite_check.isChecked(),
+            )
+        else:
+            worker = JoinWorker(
+                paths,
+                output,
+                overwrite=self.overwrite_check.isChecked(),
+                keep_bookmarks=self.bookmarks_check.isChecked(),
+            )
         worker.moveToThread(thread)
         thread._worker_anchor = worker  # keep the QObject alive for the run
         thread.started.connect(worker.run)
@@ -358,7 +414,9 @@ class MainWindow(QWidget):
     def _set_busy(self, busy: bool) -> None:
         # keep a flag so _refresh_counts can disable the join button while busy
         self._busy_flag = busy
-        self.join_button.setEnabled(not busy and self.list_widget.count() >= 2)
+        self.join_button.setEnabled(
+            not busy and self.list_widget.count() >= self._min_files()
+        )
         for widget in (self.add_button, self.remove_button, self.clear_button,
                        self.up_button, self.down_button, self.output_edit,
                        self.browse_button):
@@ -375,9 +433,17 @@ class MainWindow(QWidget):
         style.polish(self.status_label)
 
     def _browse_add(self) -> None:
+        if self._mode == "images":
+            filt = (
+                "Pictures (*.jpg *.jpeg *.png *.bmp *.gif *.tif *.tiff *.webp);;"
+                "All files (*)"
+            )
+            title = "Choose pictures"
+        else:
+            filt = "PDF files (*.pdf);;All files (*)"
+            title = "Choose PDFs to join"
         files, _ = QFileDialog.getOpenFileNames(
-            self, "Choose PDFs to join", str(self._output_dir),
-            "PDF files (*.pdf);;All files (*)"
+            self, title, str(self._output_dir), filt
         )
         if files:
             self.add_files([Path(f) for f in files])

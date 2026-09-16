@@ -18,6 +18,7 @@ from PySide6.QtCore import QObject, Signal
 from pypdf import PdfReader
 
 from ..errors import PdfToolError
+from ..images import is_image_path, images_to_pdf
 from ..join import JoinResult, join_pdfs
 
 
@@ -39,6 +40,9 @@ class PageProbeWorker(QObject):
     def run(self) -> None:  # pragma: no cover - thin; run on a QThread
         for raw in self._paths:
             try:
+                if is_image_path(raw):
+                    self.page_count.emit(raw, 1)
+                    continue
                 with PdfReader(str(raw)) as reader:
                     self.page_count.emit(raw, len(reader.pages))
             except Exception as exc:  # a bad file must not kill the probe
@@ -81,6 +85,44 @@ class JoinWorker(QObject):
         except PdfToolError as exc:
             self.failed.emit(str(exc))
         except Exception as exc:  # defensive: never leave the UI wedged
+            self.failed.emit(f"unexpected error: {exc}")
+        else:
+            self.succeeded.emit(result)
+        self.finished.emit()
+
+
+class ImagesWorker(QObject):
+    """Run :func:`pdf_tool.images_to_pdf` off the UI thread."""
+
+    started = Signal()
+    succeeded = Signal(object)
+    failed = Signal(str)
+    finished = Signal()
+
+    def __init__(
+        self,
+        inputs: Sequence[str | Path],
+        output: str | Path,
+        *,
+        overwrite: bool,
+        parent: QObject | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._inputs = [str(p) for p in inputs]
+        self._output = str(output)
+        self._overwrite = overwrite
+
+    def run(self) -> None:
+        self.started.emit()
+        try:
+            result = images_to_pdf(
+                self._inputs,
+                self._output,
+                overwrite=self._overwrite,
+            )
+        except PdfToolError as exc:
+            self.failed.emit(str(exc))
+        except Exception as exc:
             self.failed.emit(f"unexpected error: {exc}")
         else:
             self.succeeded.emit(result)

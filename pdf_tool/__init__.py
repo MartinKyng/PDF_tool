@@ -8,14 +8,18 @@ from __future__ import annotations
 
 from .errors import (
     EncryptedPdfError,
+    ImagesError,
     InputNotFoundError,
+    InvalidImageError,
     InvalidPdfError,
     JoinError,
+    NotEnoughImagesError,
     NotEnoughInputsError,
     OutputConflictError,
     OutputExistsError,
     PdfToolError,
 )
+from .images import ConvertedImage, ImagesToPdfResult, images_to_pdf
 from .join import JoinedFile, JoinResult, join_pdfs
 from .version import APP_NAME, __version__
 
@@ -25,11 +29,17 @@ __all__ = [
     "join_pdfs",
     "JoinResult",
     "JoinedFile",
+    "images_to_pdf",
+    "ImagesToPdfResult",
+    "ConvertedImage",
     "PdfToolError",
     "JoinError",
+    "ImagesError",
     "NotEnoughInputsError",
+    "NotEnoughImagesError",
     "InputNotFoundError",
     "InvalidPdfError",
+    "InvalidImageError",
     "EncryptedPdfError",
     "OutputExistsError",
     "OutputConflictError",

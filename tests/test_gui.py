@@ -130,6 +130,25 @@ class TestJoiningFromGui:
         assert qwait(lambda: "Wrote" in win.status_label.text())
 
 
+class TestImagesMode:
+    def test_one_picture_creates_a_pdf(self, qapp, qwait, tmp_path):
+        from PIL import Image
+
+        pic = tmp_path / "shot.png"
+        Image.new("RGB", (12, 8), (10, 20, 30)).save(pic)
+
+        win = MainWindow()
+        win.set_output_dir(tmp_path)
+        win.mode_bar.setCurrentIndex(1)
+        win.add_files([pic])
+        qwait(lambda: win.all_counted())
+        win.output_edit.setText("from-pictures.pdf")
+
+        win.start_join()
+        assert qwait(lambda: (tmp_path / "from-pictures.pdf").exists())
+        assert len(read(tmp_path / "from-pictures.pdf").pages) == 1
+
+
 class TestRendering:
     def test_window_renders_to_an_image(self, qapp, qwait, tmp_path, two_pdfs):
         """The offscreen platform still rasterises; prove the window paints."""

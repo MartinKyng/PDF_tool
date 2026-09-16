@@ -38,3 +38,15 @@ class OutputExistsError(JoinError):
 
 class OutputConflictError(JoinError):
     """The output file is the same file as one of the inputs."""
+
+
+class ImagesError(PdfToolError):
+    """Base class for errors raised while converting images to PDF."""
+
+
+class InvalidImageError(ImagesError):
+    """An input file exists but is not a readable picture."""
+
+
+class NotEnoughImagesError(ImagesError):
+    """No image files were supplied."""
