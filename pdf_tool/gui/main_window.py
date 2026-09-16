@@ -9,6 +9,7 @@ from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -30,7 +31,7 @@ from ..join import JoinResult
 from ..units import ensure_pdf_suffix, human_size
 from ..version import APP_NAME, __version__
 from .file_list import FileItemDelegate, ROLE_PAGES, ROLE_PATH, ROLE_SIZE
-from .worker import ImagesWorker, JoinWorker, PageProbeWorker
+from .worker import CompressWorker, ImagesWorker, JoinWorker, PageProbeWorker
 
 DEFAULT_OUTPUT = "combined.pdf"
 
@@ -80,6 +81,7 @@ class MainWindow(QWidget):
         self.mode_bar.setObjectName("modeBar")
         self.mode_bar.addTab("Join PDFs")
         self.mode_bar.addTab("Images → PDF")
+        self.mode_bar.addTab("Compress")
         self.mode_bar.setExpanding(False)
         header.addWidget(self.mode_bar)
 
@@ -177,9 +179,19 @@ class MainWindow(QWidget):
         self.combined_radio.setVisible(False)
         self.separate_radio.setVisible(False)
         self.inherit_names_check.setVisible(False)
+        self.quality_label = QLabel("Size reduction")
+        self.quality_combo = QComboBox()
+        self.quality_combo.addItem("Light", "light")
+        self.quality_combo.addItem("Balanced", "balanced")
+        self.quality_combo.addItem("Strong", "strong")
+        self.quality_combo.setCurrentIndex(1)
+        self.quality_label.setVisible(False)
+        self.quality_combo.setVisible(False)
         layout_row.addWidget(self.combined_radio)
         layout_row.addWidget(self.separate_radio)
         layout_row.addWidget(self.inherit_names_check)
+        layout_row.addWidget(self.quality_label)
+        layout_row.addWidget(self.quality_combo)
         layout_row.addStretch(1)
         out_layout.addLayout(layout_row)
 
@@ -324,9 +336,10 @@ class MainWindow(QWidget):
             self._threads.remove(thread)
 
     def _on_mode_changed(self, index: int) -> None:
-        self._mode = "images" if index == 1 else "join"
+        self._mode = {1: "images", 2: "compress"}.get(index, "join")
         self.clear_all()
         images = self._mode == "images"
+        compress = self._mode == "compress"
         if images:
             self.files_title.setText("Pictures to convert")
             self.subtitle_label.setText(
@@ -336,6 +349,16 @@ class MainWindow(QWidget):
             self.join_button.setText("Create PDF")
             self.bookmarks_check.setVisible(False)
             self.set_status("Add one or more pictures.")
+        elif compress:
+            self.files_title.setText("Files to compress")
+            self.subtitle_label.setText(
+                "Drop a PDF or picture. The tool writes a smaller copy and "
+                "leaves the original untouched — for example 305 KB down to 250 KB."
+            )
+            self.join_button.setText("Compress")
+            self.bookmarks_check.setVisible(False)
+            self.output_edit.setText("compressed.pdf")
+            self.set_status("Add a PDF or picture to shrink.")
         else:
             self.files_title.setText("Files to join")
             self.subtitle_label.setText(
@@ -343,9 +366,12 @@ class MainWindow(QWidget):
             )
             self.join_button.setText("Join PDFs")
             self.bookmarks_check.setVisible(True)
+            self.output_edit.setText(DEFAULT_OUTPUT)
             self.set_status("Add at least two PDFs to join.")
         self.combined_radio.setVisible(images)
         self.separate_radio.setVisible(images)
+        self.quality_label.setVisible(compress)
+        self.quality_combo.setVisible(compress)
         self._sync_image_output_widgets()
         self._refresh_counts()
 
@@ -368,10 +394,12 @@ class MainWindow(QWidget):
         suffix = path.suffix.lower()
         if self._mode == "images":
             return suffix in IMAGE_EXTENSIONS
+        if self._mode == "compress":
+            return suffix == ".pdf" or suffix in IMAGE_EXTENSIONS
         return suffix == ".pdf"
 
     def _min_files(self) -> int:
-        return 1 if self._mode == "images" else 2
+        return 1 if self._mode in {"images", "compress"} else 2
 
     def _refresh_counts(self, *_: object) -> None:
         files = self.list_widget.count()
@@ -388,6 +416,8 @@ class MainWindow(QWidget):
         if files < needed:
             if self._mode == "images":
                 self.set_status("Add one or more pictures.")
+            elif self._mode == "compress":
+                self.set_status("Add a PDF or picture to shrink.")
             else:
                 self.set_status("Add at least two PDFs to join.")
 
@@ -401,6 +431,8 @@ class MainWindow(QWidget):
         if len(paths) < needed:
             if self._mode == "images":
                 self.set_status("Add at least one picture first.", "error")
+            elif self._mode == "compress":
+                self.set_status("Add a file to compress first.", "error")
             else:
                 self.set_status("Add at least two PDF files first.", "error")
             return
@@ -410,10 +442,22 @@ class MainWindow(QWidget):
         output = self._output_dir / name
 
         self._set_busy(True)
-        self.set_status("Creating PDF…" if self._mode == "images" else "Joining…")
+        if self._mode == "images":
+            self.set_status("Creating PDF…")
+        elif self._mode == "compress":
+            self.set_status("Compressing…")
+        else:
+            self.set_status("Joining…")
 
         thread = QThread(self)
-        if self._mode == "images":
+        if self._mode == "compress":
+            worker = CompressWorker(
+                paths,
+                output,
+                overwrite=self.overwrite_check.isChecked(),
+                preset=str(self.quality_combo.currentData() or "balanced"),
+            )
+        elif self._mode == "images":
             combined = self.combined_radio.isChecked()
             inherit = self.inherit_names_check.isChecked()
             names = None
@@ -453,14 +497,30 @@ class MainWindow(QWidget):
         thread.start()
 
     def _on_join_success(self, result: JoinResult) -> None:
+        original = getattr(result, "original_bytes", None)
+        outputs = getattr(result, "outputs", None)
+        if original is not None:
+            self.set_status(
+                f"Wrote {result.output.name} — "
+                f"{human_size(original)} → {human_size(result.size_bytes)}.",
+                "ok",
+            )
+            return
+        if outputs and len(outputs) > 1:
+            self.set_status(
+                f"Wrote {len(outputs)} files ({human_size(result.size_bytes)}).",
+                "ok",
+            )
+            return
+        pages = getattr(result, "total_pages", getattr(result, "pages", 0))
         self.set_status(
-            f"Wrote {result.output.name} — {result.total_pages} pages "
+            f"Wrote {result.output.name} — {pages} pages "
             f"({human_size(result.size_bytes)}).",
             "ok",
         )
 
     def _on_join_failed(self, message: str) -> None:
-        self.set_status(f"Could not join: {message}", "error")
+        self.set_status(f"Could not finish: {message}", "error")
 
     def _set_busy(self, busy: bool) -> None:
         # keep a flag so _refresh_counts can disable the join button while busy
@@ -471,7 +531,8 @@ class MainWindow(QWidget):
         for widget in (self.add_button, self.remove_button, self.clear_button,
                        self.up_button, self.down_button, self.output_edit,
                        self.browse_button, self.combined_radio,
-                       self.separate_radio, self.inherit_names_check):
+                       self.separate_radio, self.inherit_names_check,
+                       self.quality_combo):
             widget.setEnabled(not busy)
         if not busy:
             self._sync_image_output_widgets()

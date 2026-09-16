@@ -15,6 +15,7 @@ from typing import Sequence
 
 from . import __version__
 from .errors import PdfToolError
+from .compress import CompressResult, compress_files
 from .images import ImagesToPdfResult, images_to_pdf
 from .join import JoinResult, join_pdfs
 from .units import ensure_pdf_suffix, human_size
@@ -29,6 +30,8 @@ examples:
   %(prog)s --images photo.jpg scan.png -o album.pdf
   %(prog)s --images --separate photo.jpg scan.png -o album.pdf
   %(prog)s --images --separate --keep-names photo.jpg scan.png -o ./out
+  %(prog)s --compress bulky.pdf -o smaller.pdf
+  %(prog)s --compress photo.jpg -o photo.jpg --quality strong
 """
 
 
@@ -55,6 +58,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="treat inputs as pictures (JPEG, PNG, BMP, GIF, TIFF, WebP) "
         "and write PDF pages from them",
+    )
+    parser.add_argument(
+        "--compress",
+        action="store_true",
+        help="shrink PDFs and pictures instead of joining them",
+    )
+    parser.add_argument(
+        "--quality",
+        choices=("light", "balanced", "strong"),
+        default="balanced",
+        help="how aggressively --compress should shrink files (default: balanced)",
     )
     parser.add_argument(
         "--separate",
@@ -132,6 +146,17 @@ def _report_images(
         )
 
 
+def _report_compress(result: CompressResult, quiet: bool) -> None:
+    if quiet:
+        return
+    print(
+        f"Compressed {len(result.outputs)} file(s): "
+        f"{human_size(result.original_bytes)} → {human_size(result.size_bytes)}"
+    )
+    for path in result.outputs:
+        print(f"  {path}")
+
+
 def _report(result: JoinResult, renamed_from: Path | None, quiet: bool) -> None:
     """Print a short summary of what was joined."""
     if quiet:
@@ -155,13 +180,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     raw_output = Path(args.output).expanduser()
-    if args.images and args.separate and (args.keep_names or raw_output.is_dir()):
+    if args.compress:
+        output, renamed = raw_output, False
+    elif args.images and args.separate and (args.keep_names or raw_output.is_dir()):
         output, renamed = raw_output, False
     else:
         output, renamed = ensure_pdf_suffix(raw_output)
 
     try:
-        if args.images:
+        if args.compress:
+            result = compress_files(
+                args.inputs,
+                output,
+                overwrite=args.overwrite,
+                preset=args.quality,
+            )
+        elif args.images:
             result = images_to_pdf(
                 args.inputs,
                 output,
@@ -182,7 +216,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     note = Path(args.output).expanduser() if renamed else None
-    if args.images:
+    if args.compress:
+        _report_compress(result, args.quiet)
+    elif args.images:
         _report_images(result, note, args.quiet)
     else:
         _report(result, note, args.quiet)

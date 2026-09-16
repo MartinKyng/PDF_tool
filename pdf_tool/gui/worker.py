@@ -1,12 +1,4 @@
-"""Background workers so the GUI never blocks on disk I/O.
-
-Two workers live here:
-
-* :class:`PageProbeWorker` counts the pages of every file the user adds, so a
-  folder of large PDFs cannot freeze the window.
-* :class:`JoinWorker` performs the actual merge off the UI thread and reports
-  progress, success and failure through signals.
-"""
+"""Background workers so the GUI never blocks on disk I/O."""
 
 from __future__ import annotations
 
@@ -17,17 +9,14 @@ from PySide6.QtCore import QObject, Signal
 
 from pypdf import PdfReader
 
+from ..compress import compress_files
 from ..errors import PdfToolError
 from ..images import is_image_path, images_to_pdf
 from ..join import JoinResult, join_pdfs
 
 
 class PageProbeWorker(QObject):
-    """Count pages for a batch of files.
-
-    Signals carry the results back so the list widget can update item
-    subtitles as they arrive.
-    """
+    """Count pages for a batch of files."""
 
     page_count = Signal(str, int)      # (path, pages)
     probe_failed = Signal(str, str)    # (path, message)
@@ -128,6 +117,47 @@ class ImagesWorker(QObject):
                 combined=self._combined,
                 inherit_names=self._inherit_names,
                 names=self._names,
+            )
+        except PdfToolError as exc:
+            self.failed.emit(str(exc))
+        except Exception as exc:
+            self.failed.emit(f"unexpected error: {exc}")
+        else:
+            self.succeeded.emit(result)
+        self.finished.emit()
+
+
+class CompressWorker(QObject):
+    """Run :func:`pdf_tool.compress_files` off the UI thread."""
+
+    started = Signal()
+    succeeded = Signal(object)
+    failed = Signal(str)
+    finished = Signal()
+
+    def __init__(
+        self,
+        inputs: Sequence[str | Path],
+        output: str | Path,
+        *,
+        overwrite: bool,
+        preset: str,
+        parent: QObject | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._inputs = [str(p) for p in inputs]
+        self._output = str(output)
+        self._overwrite = overwrite
+        self._preset = preset
+
+    def run(self) -> None:
+        self.started.emit()
+        try:
+            result = compress_files(
+                self._inputs,
+                self._output,
+                overwrite=self._overwrite,
+                preset=self._preset,
             )
         except PdfToolError as exc:
             self.failed.emit(str(exc))

@@ -6,7 +6,9 @@ PDF files in the order given, without touching page content.
 
 from __future__ import annotations
 
+from .compress import CompressResult, compress_files
 from .errors import (
+    CompressError,
     EncryptedPdfError,
     ImagesError,
     InputNotFoundError,
@@ -19,6 +21,7 @@ from .errors import (
     OutputConflictError,
     OutputExistsError,
     PdfToolError,
+    UnsupportedCompressError,
 )
 from .images import ConvertedImage, ImagesToPdfResult, images_to_pdf
 from .join import JoinedFile, JoinResult, join_pdfs

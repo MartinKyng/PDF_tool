@@ -10,6 +10,8 @@ new PDF without editing the source files.
 - **Join PDFs:** drag PDFs into the app, or use **Add** to choose them.
 - **Images → PDF:** drop JPEG, PNG, BMP, GIF, TIFF or WebP files; each picture
   becomes one page of a new PDF.
+- **Compress:** drop a PDF or picture and write a smaller copy (the original
+  is never replaced). Choose Light, Balanced or Strong.
 - Reorder files before joining or converting.
 - Live page counts and file sizes.
 - Keep or remove bookmarks when joining PDFs.
@@ -113,4 +115,6 @@ python -m pdf_tool --images photo.jpg scan.png -o album.pdf
 python -m pdf_tool --images --separate photo.jpg scan.png -o album.pdf
 python -m pdf_tool --images --separate --keep-names photo.jpg scan.png -o ./out
 python -m pdf_tool --images --separate photo.jpg scan.png -o ./out --name cover.pdf --name inside.pdf
+python -m pdf_tool --compress bulky.pdf -o smaller.pdf --quality balanced
+python -m pdf_tool --compress photo.png -o photo.jpg --quality strong
 ```

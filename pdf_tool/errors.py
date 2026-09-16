@@ -54,3 +54,11 @@ class NotEnoughImagesError(ImagesError):
 
 class NameCountError(ImagesError):
     """Individual output names do not match the number of images."""
+
+
+class CompressError(PdfToolError):
+    """Base class for errors raised while compressing files."""
+
+
+class UnsupportedCompressError(CompressError):
+    """The file type cannot be compressed by this tool."""
