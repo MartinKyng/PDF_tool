@@ -66,9 +66,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--quality",
-        choices=("light", "balanced", "strong"),
-        default="balanced",
-        help="how aggressively --compress should shrink files (default: balanced)",
+        choices=("lossless", "light", "balanced", "strong"),
+        default="lossless",
+        help="compression mode: lossless (default, no visual change) or "
+        "light/balanced/strong quality reduction (same pixels, smaller JPEGs)",
     )
     parser.add_argument(
         "--separate",

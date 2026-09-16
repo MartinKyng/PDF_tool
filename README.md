@@ -11,7 +11,9 @@ new PDF without editing the source files.
 - **Images → PDF:** drop JPEG, PNG, BMP, GIF, TIFF or WebP files; each picture
   becomes one page of a new PDF.
 - **Compress:** drop a PDF or picture and write a smaller copy (the original
-  is never replaced). Choose Light, Balanced or Strong.
+  is never replaced). **Lossless** only packs streams and never changes pixels
+  or drops page objects. **Quality reduction** (Light / Balanced / Strong)
+  re-encodes images at the same width and height.
 - Reorder files before joining or converting.
 - Live page counts and file sizes.
 - Keep or remove bookmarks when joining PDFs.

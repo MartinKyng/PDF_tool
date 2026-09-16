@@ -57,8 +57,25 @@ class TestCompressPdf:
 
         assert out.exists()
         assert out.read_bytes().startswith(b"%PDF-")
-        assert len(read(out).pages) == 1
+        pages = list(read(out).pages)
+        assert len(pages) == 1
         assert result.size_bytes < result.original_bytes
+        image = pages[0]["/Resources"]["/XObject"]["/Im1"].get_object()
+        assert int(image["/Width"]) == 64
+        assert int(image["/Height"]) == 64
+
+    def test_lossless_pdf_keeps_embedded_image_bytes(self, tmp_path):
+        source = _image_pdf(tmp_path / "photo.pdf")
+        out = tmp_path / "photo-lossless.pdf"
+        original = read(source).pages[0]["/Resources"]["/XObject"]["/Im1"].get_object()
+        rgb = original.get_data()
+
+        compress_files([source], out, preset="lossless")
+
+        image = read(out).pages[0]["/Resources"]["/XObject"]["/Im1"].get_object()
+        assert image.get_data() == rgb
+        assert int(image["/Width"]) == 64
+        assert int(image["/Height"]) == 64
 
     def test_unsupported_type_is_rejected(self, tmp_path):
         notes = tmp_path / "notes.txt"

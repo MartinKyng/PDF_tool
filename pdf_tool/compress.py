@@ -1,9 +1,9 @@
 """Shrink PDFs and pictures without replacing the originals.
 
-PDFs: content streams are Flate-compressed and embedded images are
-re-encoded as JPEG. Pictures: re-saved at a lower quality (and optionally
-resized). The example the UI aims for is the everyday case — a few hundred
-kilobytes trimmed, not a guarantee of a fixed ratio.
+Lossless mode only Flate-compresses PDF streams and optimises PNG packing;
+pixels, page objects and image dimensions are unchanged. Quality reduction
+re-encodes rasters as JPEG at the same width and height — it never crops,
+drops pages, or removes drawings.
 """
 
 from __future__ import annotations
@@ -45,12 +45,13 @@ from .join import (
 
 
 PRESETS = {
-    "light": {"quality": 82, "max_edge": None},
-    "balanced": {"quality": 65, "max_edge": 1920},
-    "strong": {"quality": 45, "max_edge": 1280},
+    "lossless": {"lossy": False, "quality": None},
+    "light": {"lossy": True, "quality": 90},
+    "balanced": {"lossy": True, "quality": 75},
+    "strong": {"lossy": True, "quality": 55},
 }
 
-DEFAULT_PRESET = "balanced"
+DEFAULT_PRESET = "lossless"
 
 
 @dataclass(frozen=True)
@@ -125,18 +126,6 @@ def _open_pdf(path: Path) -> PdfReader:
     return reader
 
 
-def _fit(image: Image.Image, max_edge: int | None) -> Image.Image:
-    if not max_edge:
-        return image
-    width, height = image.size
-    longest = max(width, height)
-    if longest <= max_edge:
-        return image
-    scale = max_edge / longest
-    size = (max(1, int(width * scale)), max(1, int(height * scale)))
-    return image.resize(size, Image.Resampling.LANCZOS)
-
-
 def _to_rgb(image: Image.Image) -> Image.Image:
     if image.mode == "RGB":
         return image
@@ -150,7 +139,7 @@ def _to_rgb(image: Image.Image) -> Image.Image:
     return image.convert("RGB")
 
 
-def _compress_picture(path: Path, dest: Path, *, quality: int, max_edge: int | None) -> int:
+def _compress_picture(path: Path, dest: Path, *, lossy: bool, quality: int | None) -> int:
     try:
         image = Image.open(path)
         image.load()
@@ -160,16 +149,17 @@ def _compress_picture(path: Path, dest: Path, *, quality: int, max_edge: int | N
         raise InvalidImageError(f"could not open '{path}': {exc}") from exc
     try:
         image = ImageOps.exif_transpose(image) or image
-        image = _fit(_to_rgb(image), max_edge)
         buffer = BytesIO()
-        image.save(buffer, format="JPEG", quality=quality, optimize=True)
-        data = buffer.getvalue()
         original = path.stat().st_size
-        if (
-            len(data) >= original
-            and path.suffix.lower() in {".jpg", ".jpeg"}
-            and dest.suffix.lower() in {".jpg", ".jpeg"}
-        ):
+        if lossy:
+            image = _to_rgb(image)
+            image.save(buffer, format="JPEG", quality=int(quality or 75), optimize=True)
+        else:
+            if image.mode not in ("RGB", "RGBA", "L", "P"):
+                image = image.convert("RGBA" if "A" in image.mode else "RGB")
+            image.save(buffer, format="PNG", optimize=True, compress_level=9)
+        data = buffer.getvalue()
+        if len(data) >= original:
             data = path.read_bytes()
         _write_bytes_atomically(data, dest)
     finally:
@@ -225,7 +215,8 @@ def _replace_with_jpeg(container, name, jpeg: bytes, size: tuple[int, int]) -> N
     container[name] = stream
 
 
-def _recompress_page_images(page, *, quality: int, max_edge: int | None) -> None:
+def _recompress_page_images(page, *, quality: int) -> None:
+    """Re-encode raster images at the same pixel size. Never drop an image."""
     resources = page.get("/Resources")
     if resources is None:
         return
@@ -241,19 +232,27 @@ def _recompress_page_images(page, *, quality: int, max_edge: int | None) -> None
         image = _xobject_to_image(obj)
         if image is None:
             continue
-        rgb = _fit(_to_rgb(image), max_edge)
+        rgb = _to_rgb(image)
         buffer = BytesIO()
         rgb.save(buffer, format="JPEG", quality=quality, optimize=True)
-        _replace_with_jpeg(xobject, name, buffer.getvalue(), rgb.size)
+        jpeg = buffer.getvalue()
+        try:
+            original = len(obj.get_data())
+        except Exception:
+            original = len(jpeg) + 1
+        if len(jpeg) >= original:
+            continue
+        _replace_with_jpeg(xobject, name, jpeg, rgb.size)
 
 
-def _compress_pdf(path: Path, dest: Path, *, quality: int, max_edge: int | None) -> tuple[int, int]:
+def _compress_pdf(path: Path, dest: Path, *, lossy: bool, quality: int | None) -> tuple[int, int]:
     reader = _open_pdf(path)
     writer = PdfWriter()
     try:
         writer.append(reader)
         for page in writer.pages:
-            _recompress_page_images(page, quality=quality, max_edge=max_edge)
+            if lossy:
+                _recompress_page_images(page, quality=int(quality or 75))
             try:
                 page.compress_content_streams()
             except Exception:
@@ -274,14 +273,23 @@ def _compress_pdf(path: Path, dest: Path, *, quality: int, max_edge: int | None)
     return dest.stat().st_size, pages
 
 
-def _default_dest(source: Path, folder: Path, single_name: Path | None, count: int) -> Path:
+def _default_dest(
+    source: Path,
+    folder: Path,
+    single_name: Path | None,
+    count: int,
+    *,
+    lossy: bool,
+) -> Path:
     if count == 1 and single_name is not None:
         if is_image_path(source) and single_name.suffix.lower() == ".pdf":
-            return folder / f"{single_name.stem}.jpg"
+            ext = ".jpg" if lossy else source.suffix.lower() or ".png"
+            return folder / f"{single_name.stem}{ext}"
         return folder / single_name.name
     if source.suffix.lower() == ".pdf":
         return folder / f"{source.stem}-compressed.pdf"
-    return folder / f"{source.stem}-compressed.jpg"
+    ext = ".jpg" if lossy else source.suffix.lower() or ".png"
+    return folder / f"{source.stem}-compressed{ext}"
 
 
 def compress_files(
@@ -316,11 +324,14 @@ def compress_files(
 
     folder = dest if dest.is_dir() else dest.parent
     single_name = None if dest.is_dir() else dest
+    lossy = bool(settings["lossy"])
     targets: list[Path] = []
     for path in paths:
-        target = _default_dest(path, folder, single_name, len(paths))
+        target = _default_dest(
+            path, folder, single_name, len(paths), lossy=lossy
+        )
         if is_image_path(path) and target.suffix.lower() == ".pdf":
-            target = target.with_suffix(".jpg")
+            target = target.with_suffix(".jpg" if lossy else path.suffix)
         targets.append(target)
         _guard_output(target, paths, overwrite)
 
@@ -332,16 +343,16 @@ def compress_files(
             written += _compress_picture(
                 source,
                 target,
+                lossy=lossy,
                 quality=settings["quality"],
-                max_edge=settings["max_edge"],
             )
             pages += 1
         else:
             size, n_pages = _compress_pdf(
                 source,
                 target,
+                lossy=lossy,
                 quality=settings["quality"],
-                max_edge=settings["max_edge"],
             )
             written += size
             pages += n_pages

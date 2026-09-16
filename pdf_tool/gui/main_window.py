@@ -8,6 +8,7 @@ from PySide6.QtCore import QThread, Qt
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -179,7 +180,12 @@ class MainWindow(QWidget):
         self.combined_radio.setVisible(False)
         self.separate_radio.setVisible(False)
         self.inherit_names_check.setVisible(False)
-        self.quality_label = QLabel("Size reduction")
+        self.lossless_radio = QRadioButton("Lossless")
+        self.lossless_radio.setChecked(True)
+        self.lossy_radio = QRadioButton("Quality reduction")
+        self.lossless_radio.setVisible(False)
+        self.lossy_radio.setVisible(False)
+        self.quality_label = QLabel("Amount")
         self.quality_combo = QComboBox()
         self.quality_combo.addItem("Light", "light")
         self.quality_combo.addItem("Balanced", "balanced")
@@ -190,10 +196,19 @@ class MainWindow(QWidget):
         layout_row.addWidget(self.combined_radio)
         layout_row.addWidget(self.separate_radio)
         layout_row.addWidget(self.inherit_names_check)
+        layout_row.addWidget(self.lossless_radio)
+        layout_row.addWidget(self.lossy_radio)
         layout_row.addWidget(self.quality_label)
         layout_row.addWidget(self.quality_combo)
         layout_row.addStretch(1)
         out_layout.addLayout(layout_row)
+
+        self._image_mode_group = QButtonGroup(self)
+        self._image_mode_group.addButton(self.combined_radio)
+        self._image_mode_group.addButton(self.separate_radio)
+        self._compress_mode_group = QButtonGroup(self)
+        self._compress_mode_group.addButton(self.lossless_radio)
+        self._compress_mode_group.addButton(self.lossy_radio)
 
         self.bookmarks_check = QCheckBox("Keep bookmarks")
         self.bookmarks_check.setChecked(True)
@@ -229,6 +244,7 @@ class MainWindow(QWidget):
         self.mode_bar.currentChanged.connect(self._on_mode_changed)
         self.combined_radio.toggled.connect(self._sync_image_output_widgets)
         self.inherit_names_check.toggled.connect(self._sync_image_output_widgets)
+        self.lossy_radio.toggled.connect(self._sync_compress_widgets)
 
     # -- drag & drop ------------------------------------------------------
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
@@ -352,8 +368,8 @@ class MainWindow(QWidget):
         elif compress:
             self.files_title.setText("Files to compress")
             self.subtitle_label.setText(
-                "Drop a PDF or picture. The tool writes a smaller copy and "
-                "leaves the original untouched — for example 305 KB down to 250 KB."
+                "Drop a PDF or picture. Lossless keeps every pixel and page "
+                "object; quality reduction only re-encodes images at the same size."
             )
             self.join_button.setText("Compress")
             self.bookmarks_check.setVisible(False)
@@ -370,10 +386,17 @@ class MainWindow(QWidget):
             self.set_status("Add at least two PDFs to join.")
         self.combined_radio.setVisible(images)
         self.separate_radio.setVisible(images)
-        self.quality_label.setVisible(compress)
-        self.quality_combo.setVisible(compress)
+        self.lossless_radio.setVisible(compress)
+        self.lossy_radio.setVisible(compress)
+        self._sync_compress_widgets()
         self._sync_image_output_widgets()
         self._refresh_counts()
+
+    def _sync_compress_widgets(self, *_: object) -> None:
+        compress = self._mode == "compress"
+        lossy = compress and self.lossy_radio.isChecked()
+        self.quality_label.setVisible(lossy)
+        self.quality_combo.setVisible(lossy)
 
     def _sync_image_output_widgets(self, *_: object) -> None:
         images = self._mode == "images"
@@ -451,11 +474,15 @@ class MainWindow(QWidget):
 
         thread = QThread(self)
         if self._mode == "compress":
+            if self.lossless_radio.isChecked():
+                preset = "lossless"
+            else:
+                preset = str(self.quality_combo.currentData() or "balanced")
             worker = CompressWorker(
                 paths,
                 output,
                 overwrite=self.overwrite_check.isChecked(),
-                preset=str(self.quality_combo.currentData() or "balanced"),
+                preset=preset,
             )
         elif self._mode == "images":
             combined = self.combined_radio.isChecked()
@@ -532,10 +559,12 @@ class MainWindow(QWidget):
                        self.up_button, self.down_button, self.output_edit,
                        self.browse_button, self.combined_radio,
                        self.separate_radio, self.inherit_names_check,
+                       self.lossless_radio, self.lossy_radio,
                        self.quality_combo):
             widget.setEnabled(not busy)
         if not busy:
             self._sync_image_output_widgets()
+            self._sync_compress_widgets()
 
     def set_status(self, text: str, kind: str = "info") -> None:
         self.status_label.setText(text)
