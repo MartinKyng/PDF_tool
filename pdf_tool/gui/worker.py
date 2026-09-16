@@ -105,12 +105,18 @@ class ImagesWorker(QObject):
         output: str | Path,
         *,
         overwrite: bool,
+        combined: bool = True,
+        inherit_names: bool = False,
+        names: Sequence[str] | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._inputs = [str(p) for p in inputs]
         self._output = str(output)
         self._overwrite = overwrite
+        self._combined = combined
+        self._inherit_names = inherit_names
+        self._names = list(names) if names else None
 
     def run(self) -> None:
         self.started.emit()
@@ -119,6 +125,9 @@ class ImagesWorker(QObject):
                 self._inputs,
                 self._output,
                 overwrite=self._overwrite,
+                combined=self._combined,
+                inherit_names=self._inherit_names,
+                names=self._names,
             )
         except PdfToolError as exc:
             self.failed.emit(str(exc))

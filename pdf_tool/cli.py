@@ -27,6 +27,8 @@ examples:
   %(prog)s chapter*.pdf --output book.pdf
   %(prog)s a.pdf b.pdf c.pdf -o out/all.pdf --overwrite
   %(prog)s --images photo.jpg scan.png -o album.pdf
+  %(prog)s --images --separate photo.jpg scan.png -o album.pdf
+  %(prog)s --images --separate --keep-names photo.jpg scan.png -o ./out
 """
 
 
@@ -52,7 +54,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--images",
         action="store_true",
         help="treat inputs as pictures (JPEG, PNG, BMP, GIF, TIFF, WebP) "
-        "and write one PDF page per image",
+        "and write PDF pages from them",
+    )
+    parser.add_argument(
+        "--separate",
+        action="store_true",
+        help="with --images, write one PDF per picture instead of combining",
+    )
+    parser.add_argument(
+        "--keep-names",
+        action="store_true",
+        help="with --separate, name each PDF after its picture "
+        "(photo.jpg → photo.pdf)",
+    )
+    parser.add_argument(
+        "--name",
+        action="append",
+        dest="names",
+        metavar="PDF",
+        help="with --separate, an explicit output name (repeat once per image)",
     )
     parser.add_argument(
         "-o",
@@ -93,16 +113,23 @@ def _report_images(
         return
     print(f"Converting {len(result.files)} image file(s):")
     for index, item in enumerate(result.files, start=1):
-        print(f"  {index}. {item.path} ({item.width}×{item.height})")
-    if renamed_from is not None:
+        extra = f" → {item.output.name}" if not result.combined else ""
+        print(f"  {index}. {item.path} ({item.width}×{item.height}){extra}")
+    if renamed_from is not None and result.combined:
         print(
             f"note: '{renamed_from}' has no .pdf extension, "
             f"wrote '{result.output}' instead"
         )
-    print(
-        f"Wrote {result.output} "
-        f"({result.total_pages} page(s), {human_size(result.size_bytes)})"
-    )
+    if result.combined:
+        print(
+            f"Wrote {result.output} "
+            f"({result.total_pages} page(s), {human_size(result.size_bytes)})"
+        )
+    else:
+        print(
+            f"Wrote {len(result.outputs)} PDF file(s) "
+            f"({human_size(result.size_bytes)})"
+        )
 
 
 def _report(result: JoinResult, renamed_from: Path | None, quiet: bool) -> None:
@@ -127,7 +154,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Entry point. Returns a process exit code."""
     args = build_parser().parse_args(argv)
 
-    output, renamed = ensure_pdf_suffix(Path(args.output).expanduser())
+    raw_output = Path(args.output).expanduser()
+    if args.images and args.separate and (args.keep_names or raw_output.is_dir()):
+        output, renamed = raw_output, False
+    else:
+        output, renamed = ensure_pdf_suffix(raw_output)
 
     try:
         if args.images:
@@ -135,6 +166,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.inputs,
                 output,
                 overwrite=args.overwrite,
+                combined=not args.separate,
+                inherit_names=args.keep_names,
+                names=args.names,
             )
         else:
             result = join_pdfs(

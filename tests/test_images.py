@@ -12,6 +12,7 @@ from helpers import read
 from pdf_tool import (
     InputNotFoundError,
     InvalidImageError,
+    NameCountError,
     NotEnoughImagesError,
     OutputExistsError,
     images_to_pdf,
@@ -107,6 +108,59 @@ class TestImagesToPdf:
         assert out.read_bytes().startswith(b"%PDF-")
 
 
+class TestIndividualPdfs:
+    def test_numbered_stem_when_one_name_given(self, two_jpegs, tmp_path):
+        first, second = two_jpegs
+        result = images_to_pdf(
+            [first, second],
+            tmp_path / "album.pdf",
+            combined=False,
+        )
+
+        assert result.combined is False
+        assert result.outputs == (tmp_path / "album-1.pdf", tmp_path / "album-2.pdf")
+        for path in result.outputs:
+            assert path.exists()
+            assert len(read(path).pages) == 1
+
+    def test_inherits_original_file_names(self, two_jpegs, tmp_path):
+        first, second = two_jpegs
+        out_dir = tmp_path / "pdfs"
+        out_dir.mkdir()
+
+        result = images_to_pdf(
+            [first, second],
+            out_dir,
+            combined=False,
+            inherit_names=True,
+        )
+
+        assert result.outputs == (out_dir / "red.pdf", out_dir / "blue.pdf")
+        assert (out_dir / "red.pdf").exists()
+        assert (out_dir / "blue.pdf").exists()
+
+    def test_explicit_names(self, two_jpegs, tmp_path):
+        first, second = two_jpegs
+        result = images_to_pdf(
+            [first, second],
+            tmp_path / "ignored.pdf",
+            combined=False,
+            names=["cover.pdf", "inside.pdf"],
+        )
+
+        assert result.outputs == (tmp_path / "cover.pdf", tmp_path / "inside.pdf")
+
+    def test_name_count_must_match(self, two_jpegs, tmp_path):
+        first, second = two_jpegs
+        with pytest.raises(NameCountError):
+            images_to_pdf(
+                [first, second],
+                tmp_path / "x.pdf",
+                combined=False,
+                names=["only-one.pdf"],
+            )
+
+
 class TestCliImages:
     def test_images_flag_writes_a_pdf(self, two_jpegs, tmp_path, capsys):
         first, second = two_jpegs
@@ -120,3 +174,45 @@ class TestCliImages:
         assert "Converting 2 image file(s)" in printed
         assert "Wrote" in printed
         assert len(read(out).pages) == 2
+
+    def test_separate_keep_names(self, two_jpegs, tmp_path, capsys):
+        first, second = two_jpegs
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+
+        code = main(
+            [
+                "--images",
+                "--separate",
+                "--keep-names",
+                str(first),
+                str(second),
+                "-o",
+                str(out_dir / "placeholder.pdf"),
+            ]
+        )
+
+        assert code == 0
+        assert (out_dir / "red.pdf").exists()
+        assert (out_dir / "blue.pdf").exists()
+        assert "Wrote 2 PDF file(s)" in capsys.readouterr().out
+
+    def test_separate_explicit_names(self, two_jpegs, tmp_path):
+        first, second = two_jpegs
+        code = main(
+            [
+                "--images",
+                "--separate",
+                str(first),
+                str(second),
+                "-o",
+                str(tmp_path / "stem.pdf"),
+                "--name",
+                "a.pdf",
+                "--name",
+                "b.pdf",
+            ]
+        )
+        assert code == 0
+        assert (tmp_path / "a.pdf").exists()
+        assert (tmp_path / "b.pdf").exists()

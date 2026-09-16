@@ -50,3 +50,7 @@ class InvalidImageError(ImagesError):
 
 class NotEnoughImagesError(ImagesError):
     """No image files were supplied."""
+
+
+class NameCountError(ImagesError):
+    """Individual output names do not match the number of images."""

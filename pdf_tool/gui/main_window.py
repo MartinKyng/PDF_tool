@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QRadioButton,
     QSizePolicy,
     QStyle,
     QTabBar,
@@ -24,7 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..images import IMAGE_EXTENSIONS
+from ..images import IMAGE_EXTENSIONS, parse_name_list
 from ..join import JoinResult
 from ..units import ensure_pdf_suffix, human_size
 from ..version import APP_NAME, __version__
@@ -167,6 +168,21 @@ class MainWindow(QWidget):
 
         options_row = QHBoxLayout()
         options_row.setSpacing(16)
+        layout_row = QHBoxLayout()
+        layout_row.setSpacing(16)
+        self.combined_radio = QRadioButton("One combined PDF")
+        self.combined_radio.setChecked(True)
+        self.separate_radio = QRadioButton("One PDF per picture")
+        self.inherit_names_check = QCheckBox("Use original file names")
+        self.combined_radio.setVisible(False)
+        self.separate_radio.setVisible(False)
+        self.inherit_names_check.setVisible(False)
+        layout_row.addWidget(self.combined_radio)
+        layout_row.addWidget(self.separate_radio)
+        layout_row.addWidget(self.inherit_names_check)
+        layout_row.addStretch(1)
+        out_layout.addLayout(layout_row)
+
         self.bookmarks_check = QCheckBox("Keep bookmarks")
         self.bookmarks_check.setChecked(True)
         self.overwrite_check = QCheckBox("Overwrite if it exists")
@@ -199,6 +215,8 @@ class MainWindow(QWidget):
         self.join_button.clicked.connect(self.start_join)
         self.list_widget.model().rowsMoved.connect(self._refresh_counts)
         self.mode_bar.currentChanged.connect(self._on_mode_changed)
+        self.combined_radio.toggled.connect(self._sync_image_output_widgets)
+        self.inherit_names_check.toggled.connect(self._sync_image_output_widgets)
 
     # -- drag & drop ------------------------------------------------------
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
@@ -308,10 +326,12 @@ class MainWindow(QWidget):
     def _on_mode_changed(self, index: int) -> None:
         self._mode = "images" if index == 1 else "join"
         self.clear_all()
-        if self._mode == "images":
+        images = self._mode == "images"
+        if images:
             self.files_title.setText("Pictures to convert")
             self.subtitle_label.setText(
-                "Drop JPEG, PNG and other pictures; each image becomes one PDF page."
+                "Drop JPEG, PNG and other pictures. Combine them, or write "
+                "one PDF per picture using original names or names you type."
             )
             self.join_button.setText("Create PDF")
             self.bookmarks_check.setVisible(False)
@@ -324,7 +344,25 @@ class MainWindow(QWidget):
             self.join_button.setText("Join PDFs")
             self.bookmarks_check.setVisible(True)
             self.set_status("Add at least two PDFs to join.")
+        self.combined_radio.setVisible(images)
+        self.separate_radio.setVisible(images)
+        self._sync_image_output_widgets()
         self._refresh_counts()
+
+    def _sync_image_output_widgets(self, *_: object) -> None:
+        images = self._mode == "images"
+        separate = images and self.separate_radio.isChecked()
+        self.inherit_names_check.setVisible(separate)
+        inherit = separate and self.inherit_names_check.isChecked()
+        self.output_edit.setEnabled(not inherit)
+        if inherit:
+            self.output_edit.setPlaceholderText("names come from the pictures")
+        elif separate:
+            self.output_edit.setPlaceholderText(
+                "e.g. album.pdf  or  one.pdf, two.pdf"
+            )
+        else:
+            self.output_edit.setPlaceholderText(f"e.g. {DEFAULT_OUTPUT}")
 
     def _accepts_path(self, path: Path) -> bool:
         suffix = path.suffix.lower()
@@ -376,10 +414,23 @@ class MainWindow(QWidget):
 
         thread = QThread(self)
         if self._mode == "images":
+            combined = self.combined_radio.isChecked()
+            inherit = self.inherit_names_check.isChecked()
+            names = None
+            if not combined and not inherit:
+                listed = parse_name_list(self.output_edit.text())
+                if len(listed) == len(paths):
+                    names = listed
+                    output = self._output_dir / listed[0]
+            elif not combined and inherit:
+                output = self._output_dir
             worker = ImagesWorker(
                 paths,
                 output,
                 overwrite=self.overwrite_check.isChecked(),
+                combined=combined,
+                inherit_names=inherit,
+                names=names,
             )
         else:
             worker = JoinWorker(
@@ -419,8 +470,11 @@ class MainWindow(QWidget):
         )
         for widget in (self.add_button, self.remove_button, self.clear_button,
                        self.up_button, self.down_button, self.output_edit,
-                       self.browse_button):
+                       self.browse_button, self.combined_radio,
+                       self.separate_radio, self.inherit_names_check):
             widget.setEnabled(not busy)
+        if not busy:
+            self._sync_image_output_widgets()
 
     def set_status(self, text: str, kind: str = "info") -> None:
         self.status_label.setText(text)

@@ -110,4 +110,7 @@ From the command line you can also convert pictures:
 
 ```bash
 python -m pdf_tool --images photo.jpg scan.png -o album.pdf
+python -m pdf_tool --images --separate photo.jpg scan.png -o album.pdf
+python -m pdf_tool --images --separate --keep-names photo.jpg scan.png -o ./out
+python -m pdf_tool --images --separate photo.jpg scan.png -o ./out --name cover.pdf --name inside.pdf
 ```

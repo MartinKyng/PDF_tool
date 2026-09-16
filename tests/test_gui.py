@@ -148,6 +148,27 @@ class TestImagesMode:
         assert qwait(lambda: (tmp_path / "from-pictures.pdf").exists())
         assert len(read(tmp_path / "from-pictures.pdf").pages) == 1
 
+    def test_separate_uses_original_names(self, qapp, qwait, tmp_path):
+        from PIL import Image
+
+        one = tmp_path / "alpha.png"
+        two = tmp_path / "beta.jpg"
+        Image.new("RGB", (4, 4), (1, 2, 3)).save(one)
+        Image.new("RGB", (4, 4), (4, 5, 6)).save(two)
+
+        win = MainWindow()
+        win.set_output_dir(tmp_path)
+        win.mode_bar.setCurrentIndex(1)
+        win.separate_radio.setChecked(True)
+        win.inherit_names_check.setChecked(True)
+        win.add_files([one, two])
+        qwait(lambda: win.all_counted())
+
+        win.start_join()
+        assert qwait(lambda: (tmp_path / "alpha.pdf").exists())
+        assert (tmp_path / "beta.pdf").exists()
+        assert len(read(tmp_path / "alpha.pdf").pages) == 1
+
 
 class TestRendering:
     def test_window_renders_to_an_image(self, qapp, qwait, tmp_path, two_pdfs):
